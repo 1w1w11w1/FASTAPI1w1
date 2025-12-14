@@ -1,1 +1,37 @@
-C:\Users\12525\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\python.exe: No module named uvicorn
+INFO:     Started server process [21228]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     127.0.0.1:29411 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:29411 - "GET /static/css/style.css HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50849 - "GET /static/js/main.js HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:50849 - "GET /podcast-generator HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50849 - "GET /static/css/podcast.css HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:29411 - "GET /static/js/podcast-generator.js HTTP/1.1" 200 OK
+INFO:     127.0.0.1:39167 - "GET /static/js/main.js HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:39167 - "GET /about HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:39167 - "GET /static/js/main.js HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:39167 - "GET /static/css/podcast.css HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:29411 - "GET /static/js/main.js HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:29411 - "GET /static/js/main.js HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:29411 - "GET /static/css/podcast.css HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:39167 - "GET /static/js/main.js HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:31745 - "GET /podcast-generator HTTP/1.1" 200 OK
+INFO:     127.0.0.1:31745 - "GET /static/css/style.css HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:11695 - "GET /static/css/podcast.css HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:31745 - "GET /static/js/main.js HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:11695 - "GET /static/js/podcast-generator.js HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:31745 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:31745 - "GET /static/js/main.js HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:31745 - "GET /static/css/podcast.css HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:11695 - "GET /static/js/main.js HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:11695 - "GET /static/js/main.js HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:11695 - "GET /static/css/podcast.css HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:31745 - "GET /static/js/main.js HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:19976 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19976 - "GET /static/css/style.css HTTP/1.1" 304 Not Modified
+INFO:     127.0.0.1:19976 - "GET /static/js/main.js HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:19976 - "GET /podcast-generator HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19976 - "GET /static/css/podcast.css HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:32827 - "GET /static/js/main.js HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:47002 - "GET /static/js/podcast-generator.js HTTP/1.1" 304 Not Modified

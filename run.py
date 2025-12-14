@@ -210,6 +210,49 @@ def main():
         print(f"未知命令: {command}")
         manager.show_usage()
         sys.exit(1)
+# 添加命令行入口函数
+def start_command():
+    """命令行入口：启动应用"""
+    manager = FastAPIManager()
+    success = manager.start()
+    sys.exit(0 if success else 1)
 
+def stop_command():
+    """命令行入口：停止应用"""
+    manager = FastAPIManager()
+    success = manager.stop()
+    sys.exit(0 if success else 1)
+
+def restart_command():
+    """命令行入口：重启应用"""
+    manager = FastAPIManager()
+    success = manager.restart()
+    sys.exit(0 if success else 1)
+
+def status_command():
+    """命令行入口：查看状态"""
+    manager = FastAPIManager()
+    manager.status()
+
+def logs_command():
+    """命令行入口：查看日志"""
+    manager = FastAPIManager()
+    if manager.log_file.exists():
+        try:
+            if platform.system() == "Windows":
+                subprocess.run(["powershell", "-Command", f"Get-Content {manager.log_file} -Wait -Tail 20"])
+            else:
+                subprocess.run(["tail", "-f", str(manager.log_file)])
+        except KeyboardInterrupt:
+            print("\n停止查看日志")
+    else:
+        print("日志文件不存在")
+
+def init_venv_command():
+    """命令行入口：初始化虚拟环境"""
+    manager = FastAPIManager()
+    success = manager.init_virtualenv()
+    sys.exit(0 if success else 1)
+    
 if __name__ == "__main__":
     main()

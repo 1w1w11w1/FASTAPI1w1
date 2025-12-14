@@ -1,0 +1,7 @@
+[console_scripts]
+pg-logs = run:logs_command
+pg-restart = run:restart_command
+pg-start = run:start_command
+pg-status = run:status_command
+pg-stop = run:stop_command
+podcast = run:main
