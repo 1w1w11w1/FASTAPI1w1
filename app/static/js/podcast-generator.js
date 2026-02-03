@@ -7,11 +7,15 @@ document.addEventListener('DOMContentLoaded', function() {
     const loadingIndicator = document.getElementById('loadingIndicator');
     const resultSection = document.getElementById('resultSection');
     const dialogOutput = document.getElementById('dialogOutput');
-    const copyBtn = document.getElementById('copyBtn');
     const exportBtn = document.getElementById('exportBtn');
+    const exportJsonBtn = document.getElementById('exportJsonBtn');
     const regenerateBtn = document.getElementById('regenerateBtn');
     const dialogStyle = document.getElementById('dialogStyle');
     const participants = document.getElementById('participants');
+    const fileInput = document.getElementById('fileInput');
+    
+    let currentScript = null; // 保存当前生成的脚本
+    let currentTokenUsage = null; // 保存当前token使用量
 
     // 实时更新字数统计
     textInput.addEventListener('input', function() {
@@ -23,6 +27,23 @@ document.addEventListener('DOMContentLoaded', function() {
         textInput.value = '';
         charCount.textContent = '0';
         textInput.focus();
+    });
+
+    // 文件上传功能
+    fileInput.addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                textInput.value = e.target.result;
+                charCount.textContent = textInput.value.length;
+                alert('文件导入成功！');
+            };
+            reader.onerror = function() {
+                alert('文件读取失败，请重试！');
+            };
+            reader.readAsText(file, 'utf-8');
+        }
     });
 
     // 生成播客对话
@@ -56,6 +77,8 @@ document.addEventListener('DOMContentLoaded', function() {
             if (!resp || !resp.ok) throw new Error(resp && resp.error ? resp.error : '生成错误');
             // 将结构化脚本转换为前端显示格式
             const script = resp.script;
+            currentScript = script; // 保存当前脚本
+            currentTokenUsage = resp.token_usage || {}; // 保存当前token使用量
             const dialog = [];
             const roleMap = {};
             if (script.roles && Array.isArray(script.roles)){
@@ -80,8 +103,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 });
             }
             displayDialog(dialog);
+            displayTokenUsage(currentTokenUsage);
             loadingIndicator.classList.add('hidden');
             resultSection.classList.remove('hidden');
+            
+            // 自动保存生成的对话
+            saveGeneratedDialog(script);
         })
             .catch(error => {
                 alert('生成对话时出错：' + error.message);
@@ -90,26 +117,85 @@ document.addEventListener('DOMContentLoaded', function() {
             });
     });
 
-    // 复制对话文本
-    copyBtn.addEventListener('click', function() {
+    // 自动保存生成的对话到result目录
+    function saveGeneratedDialog(script) {
         const dialogText = getDialogText();
-        navigator.clipboard.writeText(dialogText)
-            .then(() => {
-                alert('对话文本已复制到剪贴板！');
+        
+        // 生成简短摘要作为文件名
+        let summary = '播客对话';
+        if (script.segments && script.segments.length > 0) {
+            const firstSegment = script.segments[0].text || '';
+            summary = firstSegment.substring(0, 20).replace(/[^\u4e00-\u9fa5a-zA-Z0-9]/g, '') || '播客对话';
+            if (summary.length > 7) {
+                summary = summary.substring(0, 7);
+            }
+        }
+        
+        // 生成时间戳
+        const now = new Date();
+        const timestamp = now.getFullYear() + 
+                         String(now.getMonth() + 1).padStart(2, '0') + 
+                         String(now.getDate()).padStart(2, '0') + '_' +
+                         String(now.getHours()).padStart(2, '0') + 
+                         String(now.getMinutes()).padStart(2, '0') + 
+                         String(now.getSeconds()).padStart(2, '0');
+        
+        const filename = `${summary}_${timestamp}.txt`;
+        
+        // 调用后端保存文件
+        fetch('/save-dialog', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                content: dialogText, 
+                filename: filename,
+                script: script
             })
-            .catch(err => {
-                alert('复制失败，请手动选择文本复制');
-            });
-    });
+        })
+        .then(r => r.json())
+        .then(resp => {
+            if (resp.ok) {
+                console.log('对话已自动保存到result目录');
+            } else {
+                console.log('自动保存失败:', resp.error);
+            }
+        })
+        .catch(error => {
+            console.log('自动保存出错:', error);
+        });
+    }
 
     // 导出为文本文件
     exportBtn.addEventListener('click', function() {
+        if (!currentScript) {
+            alert('请先生成对话！');
+            return;
+        }
+        
         const dialogText = getDialogText();
         const blob = new Blob([dialogText], { type: 'text/plain' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
         a.download = '播客对话.txt';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    });
+
+    // 导出为JSON文件
+    exportJsonBtn.addEventListener('click', function() {
+        if (!currentScript) {
+            alert('请先生成对话！');
+            return;
+        }
+        
+        const blob = new Blob([JSON.stringify(currentScript, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = '播客对话.json';
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -155,84 +241,56 @@ document.addEventListener('DOMContentLoaded', function() {
         generateBtn.disabled = false;
     }
 
+    // 显示token使用量
+    function displayTokenUsage(tokenUsage) {
+        // 检查是否已存在token使用量显示元素
+        let tokenUsageElement = document.getElementById('tokenUsageInfo');
+        if (!tokenUsageElement) {
+            // 创建新的token使用量显示元素
+            tokenUsageElement = document.createElement('div');
+            tokenUsageElement.id = 'tokenUsageInfo';
+            tokenUsageElement.className = 'token-usage-info';
+            resultSection.insertBefore(tokenUsageElement, dialogOutput);
+        }
+        
+        // 计算总tokens
+        const promptTokens = tokenUsage.prompt_tokens || 0;
+        const completionTokens = tokenUsage.completion_tokens || 0;
+        const totalTokens = tokenUsage.total_tokens || (promptTokens + completionTokens);
+        
+        // 更新token使用量显示
+        tokenUsageElement.innerHTML = `
+            <div class="token-usage-title">Token使用量：</div>
+            <div class="token-usage-details">
+                <span>输入：${promptTokens}</span>
+                <span>输出：${completionTokens}</span>
+                <span>总计：${totalTokens}</span>
+            </div>
+        `;
+    }
+
     // 获取对话文本
     function getDialogText() {
         let text = '';
-        const items = dialogOutput.querySelectorAll('.dialog-item');
         
+        // 添加token使用量信息（如果有）
+        if (currentTokenUsage) {
+            const promptTokens = currentTokenUsage.prompt_tokens || 0;
+            const completionTokens = currentTokenUsage.completion_tokens || 0;
+            const totalTokens = currentTokenUsage.total_tokens || (promptTokens + completionTokens);
+            text += `Token使用量：\n`;
+            text += `输入：${promptTokens}\n`;
+            text += `输出：${completionTokens}\n`;
+            text += `总计：${totalTokens}\n\n`;
+            text += `================================\n\n`;
+        }
+        
+        // 添加对话内容
+        const items = dialogOutput.querySelectorAll('.dialog-item');
         items.forEach(item => {
             text += item.textContent + '\n\n';
         });
         
         return text;
-    }
-
-    // 模拟API调用
-    function simulateAPICall(content, style, participantCount) {
-        return new Promise((resolve, reject) => {
-            setTimeout(() => {
-                try {
-                    // 模拟生成对话逻辑
-                    const sentences = content.split(/[。！？.!?]/).filter(s => s.trim().length > 0);
-                    const dialog = [];
-                    const speakers = ['主持人'];
-                    
-                    // 添加嘉宾
-                    for (let i = 1; i < participantCount; i++) {
-                        speakers.push(`嘉宾${i}`);
-                    }
-                    
-                    sentences.forEach((sentence, index) => {
-                        if (sentence.trim().length > 0) {
-                            const speakerIndex = index % speakers.length;
-                            const role = speakerIndex === 0 ? 'host' : 'guest';
-                            
-                            dialog.push({
-                                role: role,
-                                speaker: speakers[speakerIndex],
-                                text: sentence.trim() + (index < sentences.length - 1 ? '。' : '')
-                            });
-                        }
-                    });
-                    
-                    // 添加开场和结束语
-                    if (dialog.length > 0) {
-                        dialog.unshift({
-                            role: 'host',
-                            speaker: '主持人',
-                            text: getOpeningByStyle(style)
-                        });
-                        
-                        dialog.push({
-                            role: 'host',
-                            speaker: '主持人',
-                            text: getClosingByStyle(style)
-                        });
-                    }
-                    
-                    resolve(dialog);
-                } catch (error) {
-                    reject(error);
-                }
-            }, 2000);
-        });
-    }
-
-    function getOpeningByStyle(style) {
-        const openings = {
-            casual: '大家好，欢迎收听今天的节目！',
-            professional: '各位听众大家好，欢迎收听本期专业播客。',
-            entertainment: '嘿，朋友们！准备好享受一段有趣的对话了吗？'
-        };
-        return openings[style] || openings.casual;
-    }
-
-    function getClosingByStyle(style) {
-        const closings = {
-            casual: '感谢大家的收听，我们下期再见！',
-            professional: '以上就是本期的全部内容，谢谢收听。',
-            entertainment: '今天的节目就到这里，保持微笑，下次见！'
-        };
-        return closings[style] || closings.casual;
     }
 });

@@ -227,15 +227,15 @@ footer {
 }
 
 .generate-button {
-    width: 100%;
     background: #1abc9c;
     color: white;
     border: none;
-    padding: 15px;
+    padding: 15px 30px;
     font-size: 1.1rem;
     border-radius: 5px;
     cursor: pointer;
     transition: background 0.3s;
+    margin-right: 10px;
 }
 
 .generate-button:hover {
@@ -245,6 +245,62 @@ footer {
 .generate-button:disabled {
     background: #bdc3c7;
     cursor: not-allowed;
+}
+
+.action-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 20px 0;
+    align-items: center;
+}
+
+.action-button {
+    background: #3498db;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    font-size: 1rem;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background 0.3s;
+}
+
+.action-button:hover {
+    background: #2980b9;
+}
+
+#exportJsonBtn {
+    background: #ff9800;
+}
+
+#exportJsonBtn:hover {
+    background: #f57c00;
+}
+
+#regenerateBtn {
+    background: #f44336;
+}
+
+#regenerateBtn:hover {
+    background: #d32f2f;
+}
+
+@media (max-width: 768px) {
+    .action-buttons {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .generate-button {
+        margin-right: 0;
+        margin-bottom: 10px;
+        width: 100%;
+    }
+    
+    .action-button {
+        width: 100%;
+    }
 }
 
 .hidden {
@@ -383,4 +439,30 @@ footer {
 
 #regenerateBtn:hover {
     background: #d35400;
+}
+
+/* Token使用量信息样式 */
+.token-usage-info {
+    background: #f8f9fa;
+    padding: 1rem;
+    border-radius: 5px;
+    margin-bottom: 1rem;
+    border-left: 4px solid #3498db;
+}
+
+.token-usage-title {
+    font-weight: bold;
+    color: #2c3e50;
+    margin-bottom: 0.5rem;
+}
+
+.token-usage-details {
+    display: flex;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.token-usage-details span {
+    color: #7f8c8d;
+    font-size: 0.9rem;
 }

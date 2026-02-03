@@ -43,7 +43,7 @@ def setup_api():
     print()
     print("下一步:")
     print("1. 运行: python run.py start")
-    print("2. 访问: http://localhost:8000")
+    print("2. 访问: http://localhost:914")
     print("3. 测试生成对话功能")
 
 def setup_dashscope():

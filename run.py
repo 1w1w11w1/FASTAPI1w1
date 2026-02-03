@@ -79,7 +79,7 @@ class FastAPIManager:
                 return False
         return False
 
-    def _is_port_in_use(self, host: str = "127.0.0.1", port: int = 8000) -> bool:
+    def _is_port_in_use(self, host: str = "127.0.0.1", port: int = 914) -> bool:
         """检查本地端口是否有服务在监听（通过尝试连接）。"""
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -141,7 +141,7 @@ class FastAPIManager:
                 self.print_error(f"安装依赖时出错: {e}")
         self.print_info("依赖安装完成")
 
-    def _get_pid_by_port(self, port: int = 8000):
+    def _get_pid_by_port(self, port: int = 914):
         """在 Windows 上尝试通过 netstat 查找占用指定端口的 PID；其他平台返回 None。"""
         try:
             if platform.system() == 'Windows':
@@ -199,6 +199,18 @@ class FastAPIManager:
                 self.print_info("")
                 self.print_info("验证配置:")
                 self.print_info("    python check_api.py")
+                
+                # 自动打开千问API配置指导网页
+                try:
+                    import webbrowser
+                    config_url = "https://help.aliyun.com/zh/model-studio/first-api-call-to-qwen"
+                    self.print_info(f"正在打开千问API配置指导网页: {config_url}")
+                    webbrowser.open(config_url)
+                    self.print_info("请按照网页指南完成API密钥的获取和配置")
+                except Exception as e:
+                    self.print_warning(f"无法自动打开网页: {e}")
+                    self.print_info(f"请手动访问: https://help.aliyun.com/zh/model-studio/first-api-call-to-qwen")
+                
                 return False
             else:
                 self.print_success(f"API已配置 (提供商: {_CLIENT_PROVIDER})")
@@ -237,12 +249,12 @@ class FastAPIManager:
 
         if self.is_running():
             self.print_success("应用已在运行")
-            self.print_info("访问地址: http://localhost:8000")
+            self.print_info("访问地址: http://localhost:914")
             return True
 
         if self._is_port_in_use():
             if force:
-                pid = self._get_pid_by_port(8000)
+                pid = self._get_pid_by_port(914)
                 if pid:
                     try:
                         if platform.system() == 'Windows':
@@ -258,7 +270,7 @@ class FastAPIManager:
                     self.print_error("无法定位占用端口的进程")
                     return False
             else:
-                self.print_error("端口 8000 已被占用")
+                self.print_error("端口 914 已被占用")
                 return False
             
         # 初始化步骤提示
@@ -307,7 +319,7 @@ class FastAPIManager:
             sys.executable, "-m", "uvicorn", 
             "main:app", 
             "--host", "0.0.0.0", 
-            "--port", "8000"
+            "--port", "914"
         ]
         
         # 根据模式选择启动方式
@@ -316,7 +328,7 @@ class FastAPIManager:
             try:
                 import uvicorn
                 self.print_info("前台模式启动 (按 Ctrl+C 停止)")
-                uvicorn.run("main:app", host="0.0.0.0", port=8000)
+                uvicorn.run("main:app", host="0.0.0.0", port=914)
                 return True
             except Exception as e:
                 self.print_error(f"启动失败: {e}")
@@ -384,7 +396,7 @@ class FastAPIManager:
         # 等待端口就绪，最多等待30秒
         max_wait = 30
         for i in range(max_wait):
-            if self._is_port_in_use("127.0.0.1", 8000):
+            if self._is_port_in_use("127.0.0.1", 914):
                 self.print_success(f"服务已就绪 ({i+1}s)")
                 break
             time.sleep(1)
@@ -394,7 +406,7 @@ class FastAPIManager:
 
         if self.is_running():
             self.print_success("应用启动成功")
-            url = "http://localhost:8000"
+            url = "http://localhost:914"
             self.print_info(f"访问地址: {url}")
             self.print_info(f"API 文档: {url}/docs")
             self.print_info(f"进程 PID: {process.pid}")
@@ -446,9 +458,9 @@ class FastAPIManager:
                 self.print_warning(f"停止进程时出错: {e}")
         
         # 步骤2: 检查端口是否还被占用，如果是，则查找并终止占用端口的进程
-        if self._is_port_in_use("127.0.0.1", 8000):
-            self.print_info("端口 8000 仍被占用")
-            port_pid = self._get_pid_by_port(8000)
+        if self._is_port_in_use("127.0.0.1", 914):
+            self.print_info("端口 914 仍被占用")
+            port_pid = self._get_pid_by_port(914)
             
             if port_pid:
                 self.print_info(f"终止占用端口的进程 PID={port_pid}")
@@ -476,7 +488,7 @@ class FastAPIManager:
         self.print_info("等待端口释放...")
         max_wait = 10
         for i in range(max_wait):
-            if not self._is_port_in_use("127.0.0.1", 8000):
+            if not self._is_port_in_use("127.0.0.1", 914):
                 self.print_success(f"端口已释放 ({i+1}s)")
                 break
             time.sleep(1)
@@ -492,9 +504,9 @@ class FastAPIManager:
             self.print_warning(f"清理 PID 文件失败: {e}")
         
         # 步骤4: 最终检查
-        if self._is_port_in_use("127.0.0.1", 8000):
+        if self._is_port_in_use("127.0.0.1", 914):
             self.print_error("应用停止失败，端口仍被占用")
-            self.print_info("运行 'netstat -ano | findstr :8000' 查看占用进程")
+            self.print_info("运行 'netstat -ano | findstr :914' 查看占用进程")
             return False
         else:
             self.print_success("应用已停止")
@@ -512,7 +524,7 @@ class FastAPIManager:
             with open(self.pid_file, 'r') as f:
                 pid = f.read().strip()
             self.print_success(f"应用正在运行 (PID: {pid})")
-            self.print_info("访问地址: http://localhost:8000")
+            self.print_info("访问地址: http://localhost:914")
         else:
             self.print_info("应用未运行")
     

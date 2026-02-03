@@ -125,7 +125,7 @@ def _get_style_prompt(style: str, participants: int) -> str:
     return base_prompt + "\n\n" + role_instruction
 
 
-def _call_qwen_api(prompt: str, system_prompt: str = None, model: str = "deepseek-v3.2", max_tokens: int = 4096) -> str:
+def _call_qwen_api(prompt: str, system_prompt: str = None, model: str = "deepseek-v3.2", max_tokens: int = 4096) -> tuple:
     if _CLIENT is None:
         raise RuntimeError("Qwen/OpenAI client 未配置（请设置 OPENAI_API_KEY 或 DASHSCOPE_API_KEY）")
 
@@ -142,13 +142,23 @@ def _call_qwen_api(prompt: str, system_prompt: str = None, model: str = "deepsee
         temperature=0.7,
     )
     
+    # 获取token使用量
+    token_usage = {
+        "prompt_tokens": getattr(completion, "usage", {}).get("prompt_tokens", 0),
+        "completion_tokens": getattr(completion, "usage", {}).get("completion_tokens", 0),
+        "total_tokens": getattr(completion, "usage", {}).get("total_tokens", 0)
+    }
+    
     try:
-        return completion.choices[0].message.content
+        content = completion.choices[0].message.content
+        return content, token_usage
     except Exception:
         try:
-            return completion.choices[0].text
+            content = completion.choices[0].text
+            return content, token_usage
         except Exception:
-            return str(completion)
+            content = str(completion)
+            return content, token_usage
 
 
 def generate_dialog_script(text: str, style: str = "casual", participants: int = 2, max_tokens: int = 4096) -> Dict[str, Any]:
@@ -199,6 +209,7 @@ def generate_dialog_script(text: str, style: str = "casual", participants: int =
 - 体现你的独特理解和感悟
 - 加入互动：主持人引导话题，嘉宾发表观点
 - 根据风格（{style}）调整语气
+- **重要：不要擅自给主持人和嘉宾起名字，只能使用"主持人"、"嘉宾A"、"嘉宾B"等代称**
 
 输出JSON格式：
 {{
@@ -218,11 +229,12 @@ def generate_dialog_script(text: str, style: str = "casual", participants: int =
 直接返回JSON，不要其他文字。确保对话自然流畅，每个角色发言有明显个性区别。"""
 
     try:
-        resp_text = _call_qwen_api(user_prompt, system_prompt=system_prompt, max_tokens=max_tokens)
+        resp_text, token_usage = _call_qwen_api(user_prompt, system_prompt=system_prompt, max_tokens=max_tokens)
         
         try:
             parsed = json.loads(resp_text)
             parsed.setdefault("raw", resp_text)
+            parsed.setdefault("token_usage", token_usage)
             return parsed
         except Exception:
             import re
@@ -231,6 +243,7 @@ def generate_dialog_script(text: str, style: str = "casual", participants: int =
                 try:
                     parsed = json.loads(json_match.group())
                     parsed.setdefault("raw", resp_text)
+                    parsed.setdefault("token_usage", token_usage)
                     return parsed
                 except Exception:
                     pass
@@ -239,6 +252,7 @@ def generate_dialog_script(text: str, style: str = "casual", participants: int =
                 "roles": [{"id": "host", "name": "主持人", "title": "资深媒体人"}, {"id": "guest", "name": "嘉宾", "title": "城市治理专家"}],
                 "segments": [{"role": "host", "text": resp_text}],
                 "raw": resp_text,
+                "token_usage": token_usage,
                 "error": "JSON解析失败"
             }
     except Exception as e:
@@ -260,5 +274,6 @@ def generate_dialog_script(text: str, style: str = "casual", participants: int =
             "roles": roles,
             "segments": segments,
             "raw": raw,
+            "token_usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
             "error": str(e)
         }
