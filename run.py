@@ -175,6 +175,7 @@ class FastAPIManager:
     
     def _check_api_config(self):
         """检查API配置是否有效"""
+
         try:
             # 检查千问API配置（用于对话生成和TTS）
             sys.path.insert(0, str(self.app_dir))
