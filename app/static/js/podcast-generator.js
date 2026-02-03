@@ -13,9 +13,11 @@ document.addEventListener('DOMContentLoaded', function() {
     const dialogStyle = document.getElementById('dialogStyle');
     const participants = document.getElementById('participants');
     const fileInput = document.getElementById('fileInput');
+    const createPodcastBtn = document.getElementById('createPodcastBtn');
     
-    let currentScript = null; // 保存当前生成的脚本
+    let currentScript = null; // 保存当前脚本
     let currentTokenUsage = null; // 保存当前token使用量
+    let currentDialog = null; // 保存当前对话
 
     // 实时更新字数统计
     textInput.addEventListener('input', function() {
@@ -102,6 +104,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     dialog.push({ role: roleId, speaker: speaker, text: p });
                 });
             }
+            currentDialog = dialog; // 保存当前对话
             displayDialog(dialog);
             displayTokenUsage(currentTokenUsage);
             loadingIndicator.classList.add('hidden');
@@ -205,6 +208,54 @@ document.addEventListener('DOMContentLoaded', function() {
     // 重新生成
     regenerateBtn.addEventListener('click', function() {
         generateBtn.click();
+    });
+
+    // 创建播客音频
+    createPodcastBtn.addEventListener('click', function() {
+        if (!currentDialog) {
+            alert('请先生成对话！');
+            return;
+        }
+        
+        // 显示加载指示器
+        createPodcastBtn.disabled = true;
+        loadingIndicator.classList.remove('hidden');
+        
+        // 处理对话，生成语音
+        fetch('/process-dialog-tts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ dialog: currentDialog })
+        })
+        .then(r => r.json())
+        .then(resp => {
+            if (!resp || !resp.ok) throw new Error(resp && resp.error ? resp.error : '处理对话失败');
+            
+            // 创建播客节目
+            return fetch('/create-podcast', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    dialog: resp.dialog, 
+                    podcast_title: '播客对话_' + new Date().toISOString().slice(0, 10) 
+                })
+            });
+        })
+        .then(r => r.json())
+        .then(resp => {
+            if (!resp || !resp.ok) throw new Error(resp && resp.error ? resp.error : '创建播客失败');
+            
+            alert('播客音频创建成功！');
+            console.log('播客创建成功，路径:', resp.podcast_path);
+        })
+        .catch(error => {
+            alert('创建播客时出错：' + error.message);
+            console.error('创建播客失败:', error);
+        })
+        .finally(() => {
+            loadingIndicator.classList.add('hidden');
+            createPodcastBtn.disabled = false;
+        });
     });
 
     // 显示生成的对话
