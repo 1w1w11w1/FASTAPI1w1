@@ -55,4 +55,5 @@ results/
 
 # 推送脚本
 push_to_github.ps1
+push_to_github.bat
 
