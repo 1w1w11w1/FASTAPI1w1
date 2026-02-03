@@ -1,0 +1,38 @@
+# Set default behavior to automatically normalize line endings.
+* text=auto
+
+# Explicitly specify line endings for Python files
+*.py text eol=lf
+
+# Explicitly specify line endings for text files
+*.txt text eol=lf
+*.md text eol=lf
+*.rst text eol=lf
+*.ini text eol=lf
+*.cfg text eol=lf
+*.conf text eol=lf
+
+# Binary files should not be touched by Git
+*.jpg binary
+*.jpeg binary
+*.png binary
+*.gif binary
+*.bmp binary
+*.ico binary
+*.svg binary
+*.pdf binary
+*.zip binary
+*.tar.gz binary
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+*.mp3 binary
+*.mp4 binary
+*.wav binary
+*.ogg binary
+*.flac binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary

@@ -281,6 +281,12 @@ class FastAPIManager:
                             self.print_info(f"重新初始化后，客户端状态: {_CLIENT is not None}")
                             if _CLIENT is not None:
                                 self.print_info(f"客户端提供商: {_CLIENT_PROVIDER}")
+                            # 打印更多调试信息
+                            import os
+                            dashscope_api_key = os.getenv("DASHSCOPE_API_KEY")
+                            self.print_info(f"DASHSCOPE_API_KEY存在: {dashscope_api_key is not None}")
+                            if dashscope_api_key:
+                                self.print_info(f"DASHSCOPE_API_KEY长度: {len(dashscope_api_key)}")
                             
                             # 重新检查API密钥
                             dashscope_api_key = os.getenv("DASHSCOPE_API_KEY")
@@ -496,21 +502,27 @@ class FastAPIManager:
         # 后台以子进程方式启动 uvicorn
         if platform.system() == "Windows":
             import subprocess as sp
-            logfh = open(self.log_file, 'a')
+            logfh = open(self.log_file, 'a', encoding='utf-8', errors='replace')
+            env = os.environ.copy()
+            env['PYTHONIOENCODING'] = 'utf-8'
             process = sp.Popen(
                 cmd,
                 stdout=logfh,
                 stderr=sp.STDOUT,
-                creationflags=sp.CREATE_NEW_PROCESS_GROUP
+                creationflags=sp.CREATE_NEW_PROCESS_GROUP,
+                env=env
             )
         else:
             import subprocess as sp
-            logfh = open(self.log_file, 'a')
+            logfh = open(self.log_file, 'a', encoding='utf-8', errors='replace')
+            env = os.environ.copy()
+            env['PYTHONIOENCODING'] = 'utf-8'
             process = sp.Popen(
                 cmd,
                 stdout=logfh,
                 stderr=sp.STDOUT,
-                preexec_fn=os.setpgrp
+                preexec_fn=os.setpgrp,
+                env=env
             )
         
         # 保存PID

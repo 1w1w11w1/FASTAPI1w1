@@ -1,5 +1,6 @@
 import os
 import json
+import logging
 from typing import Any, Dict
 
 try:
@@ -8,23 +9,107 @@ try:
 except ImportError:
     pass
 
+# 配置日志
+log_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'logs')
+os.makedirs(log_dir, exist_ok=True)
+
+# 创建日志格式
+log_format = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+# 创建文件处理器（按日期分割）
+from logging.handlers import TimedRotatingFileHandler
+file_handler = TimedRotatingFileHandler(
+    os.path.join(log_dir, 'app.log'),
+    when='midnight',
+    interval=1,
+    backupCount=30,
+    encoding='utf-8'
+)
+file_handler.suffix = '%Y-%m-%d.log'
+file_handler.setFormatter(log_format)
+
+# 创建控制台处理器
+console_handler = logging.StreamHandler()
+console_handler.setFormatter(log_format)
+
+# 配置根日志记录器（只配置一次）
+root_logger = logging.getLogger()
+if not root_logger.handlers:
+    root_logger.setLevel(logging.INFO)
+    root_logger.addHandler(file_handler)
+    root_logger.addHandler(console_handler)
+
+logger = logging.getLogger(__name__)
+
 _CLIENT = None
 _CLIENT_PROVIDER = None
 
 try:
-    from openai import OpenAI
-    openai_key = os.getenv("OPENAI_API_KEY") or os.getenv("DASHSCOPE_API_KEY")
-    if openai_key:
-        base_url = os.getenv("DASHSCOPE_BASE_URL")
-        if base_url:
-            _CLIENT = OpenAI(api_key=openai_key, base_url=base_url)
-            _CLIENT_PROVIDER = "dashscope"
+    # 尝试使用DashScope SDK
+    logger.info("尝试初始化DashScope SDK客户端...")
+    import dashscope
+    dashscope_api_key = os.getenv("DASHSCOPE_API_KEY")
+    logger.info(f"DASHSCOPE_API_KEY存在: {dashscope_api_key is not None}")
+    if dashscope_api_key:
+        logger.info(f"DASHSCOPE_API_KEY长度: {len(dashscope_api_key)}")
+        dashscope.api_key = dashscope_api_key
+        _CLIENT = dashscope
+        _CLIENT_PROVIDER = "dashscope_sdk"
+        logger.info("DashScope SDK客户端初始化成功")
+    else:
+        logger.warning("DASHSCOPE_API_KEY不存在，无法初始化DashScope SDK客户端")
+        _CLIENT = None
+        _CLIENT_PROVIDER = None
+except ImportError as e:
+    logger.warning(f"未安装DashScope SDK，将尝试使用OpenAI兼容接口: {e}")
+    # 如果没有安装DashScope SDK，尝试使用OpenAI兼容接口
+    try:
+        logger.info("尝试初始化OpenAI兼容接口客户端...")
+        from openai import OpenAI
+        openai_key = os.getenv("OPENAI_API_KEY") or os.getenv("DASHSCOPE_API_KEY")
+        logger.info(f"OpenAI/千问API密钥存在: {openai_key is not None}")
+        if openai_key:
+            logger.info(f"OpenAI/千问API密钥长度: {len(openai_key)}")
+            base_url = os.getenv("DASHSCOPE_BASE_URL")
+            logger.info(f"DASHSCOPE_BASE_URL: {base_url}")
+            # 检查是否使用的是千问API密钥
+            dashscope_api_key = os.getenv("DASHSCOPE_API_KEY")
+            if dashscope_api_key and openai_key == dashscope_api_key:
+                logger.info("使用千问API密钥，将设置千问API的base_url")
+                # 自动设置千问API的base_url
+                if not base_url:
+                    base_url = "https://dashscope.aliyuncs.com/api/v1"
+                    logger.info(f"自动设置千问API的base_url: {base_url}")
+                _CLIENT = OpenAI(api_key=openai_key, base_url=base_url)
+                _CLIENT_PROVIDER = "dashscope"
+                logger.info(f"OpenAI兼容接口客户端初始化成功，使用千问API: {base_url}")
+            else:
+                logger.info("使用其他API密钥")
+                # 使用其他API密钥
+                if base_url:
+                    _CLIENT = OpenAI(api_key=openai_key, base_url=base_url)
+                    _CLIENT_PROVIDER = "custom"
+                    logger.info(f"OpenAI兼容接口客户端初始化成功，使用自定义base_url: {base_url}")
+                else:
+                    _CLIENT = OpenAI(api_key=openai_key)
+                    _CLIENT_PROVIDER = "openai"
+                    logger.info("OpenAI兼容接口客户端初始化成功，使用默认base_url")
         else:
-            _CLIENT = OpenAI(api_key=openai_key)
-            _CLIENT_PROVIDER = "openai"
-except Exception:
+            logger.warning("OpenAI/千问API密钥不存在，无法初始化OpenAI兼容接口客户端")
+            _CLIENT = None
+            _CLIENT_PROVIDER = None
+    except Exception as e:
+        logger.error(f"初始化OpenAI客户端失败: {e}")
+        _CLIENT = None
+        _CLIENT_PROVIDER = None
+except Exception as e:
+    logger.error(f"初始化DashScope客户端失败: {e}")
     _CLIENT = None
     _CLIENT_PROVIDER = None
+
+logger.info(f"API客户端初始化完成: {_CLIENT is not None}")
+if _CLIENT is not None:
+    logger.info(f"API客户端提供商: {_CLIENT_PROVIDER}")
 
 
 def _get_style_prompt(style: str, participants: int) -> str:
@@ -127,62 +212,167 @@ def _get_style_prompt(style: str, participants: int) -> str:
 
 def _call_qwen_api(prompt: str, system_prompt: str = None, model: str = "qwen-plus", max_tokens: int = 4096) -> tuple:
     if _CLIENT is None:
+        logger.error("Qwen/OpenAI client 未配置（请设置 OPENAI_API_KEY 或 DASHSCOPE_API_KEY）")
         raise RuntimeError("Qwen/OpenAI client 未配置（请设置 OPENAI_API_KEY 或 DASHSCOPE_API_KEY）")
 
     if system_prompt is None:
         system_prompt = "你是一个擅长将文章改写为对话式播客脚本的助手。"
 
+    logger.info(f"开始API调用...")
+    logger.info(f"API提供商: {_CLIENT_PROVIDER}")
+    logger.info(f"使用的模型: {model}")
+    logger.info(f"max_tokens: {max_tokens}")
+    logger.info(f"temperature: 0.7")
+    logger.info(f"system_prompt长度: {len(system_prompt)}")
+    logger.info(f"prompt长度: {len(prompt)}")
+
     try:
-        completion = _CLIENT.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": prompt},
-            ],
-            max_tokens=max_tokens,
-            temperature=0.7,
-        )
-        
-        # 获取token使用量
-        try:
-            usage = getattr(completion, "usage", None)
-            if usage:
-                token_usage = {
-                    "prompt_tokens": getattr(usage, "prompt_tokens", 0),
-                    "completion_tokens": getattr(usage, "completion_tokens", 0),
-                    "total_tokens": getattr(usage, "total_tokens", 0)
-                }
+        if _CLIENT_PROVIDER == "dashscope_sdk":
+            # 使用DashScope SDK调用API
+            logger.info("使用DashScope SDK调用API...")
+            from dashscope import Generation
+            logger.info("创建Generation请求...")
+            response = Generation.call(
+                model=model,
+                prompt=prompt,
+                system=system_prompt,
+                max_tokens=max_tokens,
+                temperature=0.7,
+            )
+            
+            logger.info(f"API调用响应状态码: {response.status_code}")
+            logger.info(f"API调用响应消息: {response.message}")
+            
+            # 处理响应
+            if response.status_code == 200:
+                logger.info("API调用成功！")
+                logger.info(f"响应输出类型: {type(response.output)}")
+                if hasattr(response.output, 'text'):
+                    content = response.output.text
+                    logger.info(f"响应内容长度: {len(content)}")
+                    logger.info(f"响应内容前50个字符: {content[:50]}...")
+                else:
+                    logger.error(f"响应输出没有text属性: {dir(response.output)}")
+                    content = str(response.output)
+                
+                # 获取token使用量
+                if hasattr(response, 'usage'):
+                    logger.info(f"响应usage类型: {type(response.usage)}")
+                    if hasattr(response.usage, 'input_tokens') and hasattr(response.usage, 'output_tokens') and hasattr(response.usage, 'total_tokens'):
+                        token_usage = {
+                            "prompt_tokens": response.usage.input_tokens,
+                            "completion_tokens": response.usage.output_tokens,
+                            "total_tokens": response.usage.total_tokens
+                        }
+                        logger.info(f"Token使用量: {token_usage}")
+                    else:
+                        logger.error(f"响应usage属性不完整: {dir(response.usage)}")
+                        token_usage = {
+                            "prompt_tokens": 0,
+                            "completion_tokens": 0,
+                            "total_tokens": 0
+                        }
+                else:
+                    logger.error(f"响应没有usage属性: {dir(response)}")
+                    token_usage = {
+                        "prompt_tokens": 0,
+                        "completion_tokens": 0,
+                        "total_tokens": 0
+                    }
+                return content, token_usage
             else:
+                logger.error(f"DashScope API调用失败: {response.message}")
+                logger.error(f"响应详情: {dir(response)}")
+                if hasattr(response, 'code'):
+                    logger.error(f"错误代码: {response.code}")
+                raise RuntimeError(f"DashScope API调用失败: {response.message}")
+        else:
+            # 使用OpenAI兼容接口调用API
+            logger.info("使用OpenAI兼容接口调用API...")
+            logger.info("创建chat.completions.create请求...")
+            completion = _CLIENT.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": prompt},
+                ],
+                max_tokens=max_tokens,
+                temperature=0.7,
+            )
+            
+            logger.info(f"API调用成功，响应类型: {type(completion)}")
+            
+            # 获取token使用量
+            try:
+                usage = getattr(completion, "usage", None)
+                if usage:
+                    logger.info(f"响应usage类型: {type(usage)}")
+                    token_usage = {
+                        "prompt_tokens": getattr(usage, "prompt_tokens", 0),
+                        "completion_tokens": getattr(usage, "completion_tokens", 0),
+                        "total_tokens": getattr(usage, "total_tokens", 0)
+                    }
+                    logger.info(f"Token使用量: {token_usage}")
+                else:
+                    logger.error(f"响应没有usage属性: {dir(completion)}")
+                    token_usage = {
+                        "prompt_tokens": 0,
+                        "completion_tokens": 0,
+                        "total_tokens": 0
+                    }
+            except Exception as e:
+                logger.error(f"获取token使用量失败: {e}")
                 token_usage = {
                     "prompt_tokens": 0,
                     "completion_tokens": 0,
                     "total_tokens": 0
                 }
-        except Exception:
-            token_usage = {
-                "prompt_tokens": 0,
-                "completion_tokens": 0,
-                "total_tokens": 0
-            }
-        
-        try:
-            content = completion.choices[0].message.content
-            return content, token_usage
-        except Exception:
+            
             try:
-                content = completion.choices[0].text
+                content = completion.choices[0].message.content
+                logger.info(f"响应内容长度: {len(content)}")
+                logger.info(f"响应内容前50个字符: {content[:50]}...")
                 return content, token_usage
-            except Exception:
-                content = str(completion)
-                return content, token_usage
+            except Exception as e:
+                logger.error(f"获取响应内容失败: {e}")
+                try:
+                    content = completion.choices[0].text
+                    logger.info(f"使用text属性获取响应内容，长度: {len(content)}")
+                    return content, token_usage
+                except Exception as e2:
+                    logger.error(f"使用text属性获取响应内容也失败: {e2}")
+                    content = str(completion)
+                    logger.info(f"使用str(completion)获取响应内容，长度: {len(content)}")
+                    return content, token_usage
     except Exception as e:
-        print(f"API调用失败: {e}")
-        print(f"使用的模型: {model}")
+        logger.error(f"API调用失败: {e}")
+        logger.error(f"使用的模型: {model}")
+        logger.error(f"API提供商: {_CLIENT_PROVIDER}")
+        # 打印更详细的错误信息
+        import traceback
+        logger.error(f"详细错误信息: {traceback.format_exc()}")
         raise
 
 
 def generate_dialog_script(text: str, style: str = "casual", participants: int = 2, max_tokens: int = 4096, model: str = "deepseek-v3.2") -> Dict[str, Any]:
+    logger.info("开始生成对话脚本...")
+    logger.info(f"输入文本长度: {len(text)}")
+    logger.info(f"风格: {style}")
+    logger.info(f"参与人数: {participants}")
+    logger.info(f"max_tokens: {max_tokens}")
+    logger.info(f"模型: {model}")
+    
+    # 根据API提供商选择合适的模型名称
+    if _CLIENT_PROVIDER == "dashscope" or _CLIENT_PROVIDER == "dashscope_sdk":
+        # 千问API支持的模型名称
+        logger.info("使用千问API，检查模型名称...")
+        if model not in ["qwen-plus", "qwen-turbo", "qwen-max"]:
+            # 默认使用qwen-turbo
+            logger.info(f"模型 {model} 不是千问API支持的模型，将使用默认模型 qwen-turbo")
+            model = "qwen-turbo"
+        logger.info(f"最终使用的模型: {model}")
     system_prompt = _get_style_prompt(style, participants)
+    logger.info(f"system_prompt生成完成，长度: {len(system_prompt)}")
     
     user_prompt = f"""请基于以下新闻创作一个引人入胜的播客对话：
 
@@ -248,28 +438,45 @@ def generate_dialog_script(text: str, style: str = "casual", participants: int =
 
 直接返回JSON，不要其他文字。确保对话自然流畅，每个角色发言有明显个性区别。"""
 
+    logger.info(f"user_prompt生成完成，长度: {len(user_prompt)}")
+
     try:
+        logger.info("开始调用API生成对话...")
         resp_text, token_usage = _call_qwen_api(user_prompt, system_prompt=system_prompt, model=model, max_tokens=max_tokens)
+        logger.info(f"API调用完成，响应文本长度: {len(resp_text)}")
+        logger.info(f"Token使用量: {token_usage}")
         
         try:
+            logger.info("尝试解析JSON响应...")
             parsed = json.loads(resp_text)
+            logger.info("JSON解析成功！")
+            logger.info(f"解析后的角色数量: {len(parsed.get('roles', []))}")
+            logger.info(f"解析后的对话段数: {len(parsed.get('segments', []))}")
             parsed.setdefault("raw", resp_text)
             parsed.setdefault("token_usage", token_usage)
             parsed.setdefault("model", model)
+            logger.info("对话脚本生成成功！")
             return parsed
-        except Exception:
+        except Exception as e:
+            logger.warning(f"JSON解析失败: {e}")
+            logger.info("尝试使用正则表达式提取JSON...")
             import re
             json_match = re.search(r'\{[\s\S]*\}', resp_text)
             if json_match:
                 try:
                     parsed = json.loads(json_match.group())
+                    logger.info("正则表达式提取JSON成功！")
+                    logger.info(f"解析后的角色数量: {len(parsed.get('roles', []))}")
+                    logger.info(f"解析后的对话段数: {len(parsed.get('segments', []))}")
                     parsed.setdefault("raw", resp_text)
                     parsed.setdefault("token_usage", token_usage)
                     parsed.setdefault("model", model)
+                    logger.info("对话脚本生成成功！")
                     return parsed
-                except Exception:
-                    pass
+                except Exception as e2:
+                    logger.error(f"正则表达式提取JSON也失败: {e2}")
             
+            logger.info("返回原始响应文本...")
             return {
                 "roles": [{"id": "host", "name": "主持人", "title": "资深媒体人"}, {"id": "guest", "name": "嘉宾", "title": "城市治理专家"}],
                 "segments": [{"role": "host", "text": resp_text}],
@@ -280,6 +487,9 @@ def generate_dialog_script(text: str, style: str = "casual", participants: int =
             }
     except Exception as e:
         # 当模型调用失败时，不再输出机械拆分的文本，而是返回明确的错误信息
+        logger.error(f"模型调用失败: {e}")
+        import traceback
+        logger.error(f"详细错误信息: {traceback.format_exc()}")
         error_msg = f"模型调用失败: {str(e)}"
         return {
             "roles": [{"id": "host", "name": "系统", "title": "错误信息"}],

@@ -2,9 +2,13 @@ import os
 import json
 import uuid
 import httpx
+import logging
 from typing import Dict, List, Optional, Tuple
 from pathlib import Path
 from dotenv import load_dotenv
+
+# 获取日志记录器
+logger = logging.getLogger(__name__)
 
 class TTSManager:
     def __init__(self):
@@ -13,7 +17,8 @@ class TTSManager:
         
         # 千问TTS配置
         self.dashscope_api_key = os.getenv("DASHSCOPE_API_KEY")
-        self.dashscope_tts_endpoint = "https://dashscope.aliyuncs.com/api/v1/tts/text2speech"
+        # 修正TTS API端点URL
+        self.dashscope_tts_endpoint = "https://dashscope.aliyuncs.com/api/v1/services/audio/speech_synthesis"
         
         # 说话人配置（使用千问TTS支持的音色）
         self.speakers = {
@@ -42,6 +47,10 @@ class TTSManager:
         # 确保音频输出目录存在
         self.audio_output_dir = Path(__file__).parent.parent / "audio"
         self.audio_output_dir.mkdir(exist_ok=True)
+        
+        logger.info("TTSManager初始化完成")
+        logger.info(f"千问API密钥存在: {self.dashscope_api_key is not None}")
+        logger.info(f"TTS API端点: {self.dashscope_tts_endpoint}")
     
     def generate_speech(self, text: str, speaker_id: str, audio_format: str = "mp3") -> Optional[str]:
         """
@@ -54,7 +63,7 @@ class TTSManager:
         try:
             # 检查配置是否齐全
             if not self.dashscope_api_key:
-                print("千问TTS配置不完整，请在.env文件中设置DASHSCOPE_API_KEY")
+                logger.error("千问TTS配置不完整，请在.env文件中设置DASHSCOPE_API_KEY")
                 return None
             
             # 获取说话人配置
@@ -91,9 +100,11 @@ class TTSManager:
             }
             
             # 调用千问TTS API
-            print(f"调用千问TTS API生成语音...")
-            print(f"文本: {text[:50]}...")
-            print(f"说话人: {speaker['name']} ({speaker['voice_id']})")
+            logger.info("调用千问TTS API生成语音...")
+            logger.info(f"文本长度: {len(text)}, 前50个字符: {text[:50]}...")
+            logger.info(f"说话人: {speaker['name']} ({speaker['voice_id']})")
+            logger.info(f"请求URL: {self.dashscope_tts_endpoint}")
+            logger.info(f"请求参数: {json.dumps(request_data, ensure_ascii=False)[:200]}...")
             
             with httpx.Client() as client:
                 response = client.post(
@@ -104,12 +115,17 @@ class TTSManager:
                 )
                 
                 # 检查响应状态
+                logger.info(f"TTS API响应状态码: {response.status_code}")
+                logger.info(f"TTS API响应文本: {response.text[:200]}...")
+                
                 if response.status_code == 200:
                     # 解析响应
                     response_data = response.json()
+                    logger.info(f"TTS API响应数据: {json.dumps(response_data, ensure_ascii=False)[:200]}...")
+                    
                     if response_data.get("status_code") == 200:
                         # 获取音频数据
-                        audio_data = response_data.get("audio_data")
+                        audio_data = response_data.get("result", {}).get("audio_data")
                         if audio_data:
                             # 解码base64音频数据
                             import base64
@@ -117,23 +133,23 @@ class TTSManager:
                             # 保存音频数据
                             with open(output_path, 'wb') as f:
                                 f.write(audio_bytes)
-                            print(f"语音生成成功: {output_path}")
+                            logger.info(f"语音生成成功: {output_path}")
                             return str(output_path)
                         else:
-                            print("语音生成失败: 未返回音频数据")
+                            logger.error("语音生成失败: 未返回音频数据")
                             return None
                     else:
-                        print(f"语音生成失败: {response_data.get('status_message', '未知错误')}")
+                        logger.error(f"语音生成失败: {response_data.get('status_message', '未知错误')}")
                         return None
                 else:
-                    print(f"语音生成失败，状态码: {response.status_code}")
-                    print(f"错误信息: {response.text}")
+                    logger.error(f"语音生成失败，状态码: {response.status_code}")
+                    logger.error(f"错误信息: {response.text}")
                     return None
                     
         except Exception as e:
-            print(f"语音生成失败: {e}")
+            logger.error(f"语音生成失败: {e}")
             import traceback
-            traceback.print_exc()
+            logger.error(f"详细错误信息: {traceback.format_exc()}")
             return None
     
     def process_dialog(self, dialog: List[Dict]) -> List[Dict]:
@@ -161,6 +177,7 @@ class TTSManager:
             }
             processed_dialog.append(processed_item)
         
+        logger.info(f"对话处理完成，共处理 {len(processed_dialog)} 个对话")
         return processed_dialog
     
     def create_podcast(self, dialog: List[Dict], podcast_title: str) -> Optional[str]:
@@ -189,9 +206,10 @@ class TTSManager:
             with open(output_path, 'w', encoding='utf-8') as f:
                 json.dump(podcast_info, f, ensure_ascii=False, indent=2)
             
+            logger.info(f"播客创建成功: {output_path}")
             return str(output_path)
         except Exception as e:
-            print(f"播客创建失败: {e}")
+            logger.error(f"播客创建失败: {e}")
             return None
     
     def get_speakers(self) -> Dict[str, Dict]:
@@ -213,10 +231,12 @@ class TTSManager:
             if speaker_id in self.speakers:
                 self.speakers[speaker_id]["voice_id"] = voice_id
                 self.speakers[speaker_id]["style"] = style
+                logger.info(f"说话人 {speaker_id} 更新成功: {voice_id}, {style}")
                 return True
+            logger.warning(f"说话人 {speaker_id} 不存在")
             return False
         except Exception as e:
-            print(f"说话人更新失败: {e}")
+            logger.error(f"说话人更新失败: {e}")
             return False
 
 # 全局TTS管理器实例
