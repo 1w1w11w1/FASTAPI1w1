@@ -20,6 +20,12 @@ wheels/
 .installed.cfg
 *.egg
 
+# 虚拟环境
+.venv/
+env/
+env.local/
+env.*.local/
+
 # 环境配置
 .env
 
