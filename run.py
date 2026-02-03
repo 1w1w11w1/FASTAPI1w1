@@ -188,40 +188,12 @@ class FastAPIManager:
             
             # 检查千问API配置
             api_configured = False
-            if _CLIENT is not None:
-                api_key = os.getenv("OPENAI_API_KEY") or os.getenv("DASHSCOPE_API_KEY")
-                if api_key:
-                    # 隐藏中间部分，只显示前4位和后4位
-                    hidden_key = f"{api_key[:4]}...{api_key[-4:]}"
-                    self.print_success(f"千问API已配置 (提供商: {_CLIENT_PROVIDER}, 密钥: {hidden_key})")
-                else:
-                    self.print_success(f"千问API已配置 (提供商: {_CLIENT_PROVIDER})")
-                api_configured = True
-            else:
-                self.print_error("千问API未配置")
-            
-            # 检查DASHSCOPE_API_KEY是否存在（用于TTS）
             dashscope_api_key = os.getenv("DASHSCOPE_API_KEY")
-            if not dashscope_api_key:
-                self.print_error("千问TTS API未配置")
-                api_configured = False
             
-            # 如果API未配置，显示配置指南
-            if not api_configured:
-                self.print_info("请先配置千问API密钥后再启动服务")
-                self.print_info("")
-                self.print_info("配置方法：")
-                self.print_info("  方法: 手动配置")
-                self.print_info("    1. 复制 .env.example 为 .env")
-                self.print_info("    2. 编辑 .env 文件，填入以下配置：")
-                self.print_info("       - DASHSCOPE_API_KEY：千问API密钥")
-                self.print_info("")
-                self.print_info("获取API密钥的方法：")
-                self.print_info("  千问API密钥：")
-                self.print_info("     - 访问：https://help.aliyun.com/zh/model-studio/first-api-call-to-qwen")
-                self.print_info("     - 按照指南获取API密钥")
-                self.print_info("")
-                self.print_info("注意：千问API密钥将用于对话生成和语音合成功能")
+            # 如果API密钥缺失，允许用户在控制台输入
+            if not dashscope_api_key:
+                self.print_info("未检测到千问API密钥配置")
+                self.print_info("正在打开千问API配置指导网页...")
                 
                 # 自动打开配置指导网页
                 try:
@@ -232,6 +204,172 @@ class FastAPIManager:
                     webbrowser.open(qwen_url)
                 except Exception as e:
                     self.print_warning(f"无法自动打开网页: {e}")
+                
+                self.print_info("")
+                self.print_info("您可以直接在控制台输入API密钥进行配置")
+                self.print_info("请输入千问API密钥（输入时不会显示）：")
+                
+                # 读取用户输入的API密钥，不显示输入内容
+                import getpass
+                try:
+                    dashscope_api_key = getpass.getpass()
+                    if dashscope_api_key:
+                        # 将API密钥写入.env文件
+                        # 确保使用项目根目录的绝对路径
+                        import os
+                        env_file = os.path.join(str(self.project_root), ".env")
+                        self.print_info(f"项目根目录: {self.project_root}")
+                        self.print_info(f"正在写入API密钥到文件: {env_file}")
+                        
+                        try:
+                            if os.path.exists(env_file):
+                                # 读取现有内容
+                                with open(env_file, "r", encoding="utf-8") as f:
+                                    lines = f.readlines()
+                                
+                                # 更新或添加DASHSCOPE_API_KEY
+                                updated_lines = []
+                                found = False
+                                for line in lines:
+                                    if line.startswith("DASHSCOPE_API_KEY="):
+                                        updated_lines.append(f"DASHSCOPE_API_KEY={dashscope_api_key}\n")
+                                        found = True
+                                    else:
+                                        updated_lines.append(line)
+                                
+                                if not found:
+                                    updated_lines.append(f"DASHSCOPE_API_KEY={dashscope_api_key}\n")
+                                
+                                # 写回文件
+                                with open(env_file, "w", encoding="utf-8") as f:
+                                    f.writelines(updated_lines)
+                                self.print_info("已更新现有.env文件")
+                            else:
+                                # 创建新的.env文件，使用合理的格式
+                                with open(env_file, "w", encoding="utf-8") as f:
+                                    f.write("# API配置\n")
+                                    f.write("# 千问API密钥（用于对话生成和TTS）\n")
+                                    f.write(f"DASHSCOPE_API_KEY={dashscope_api_key}\n")
+                                    f.write("\n")
+                                    f.write("# 其他配置（可选）\n")
+                                    f.write("# MODEL=deepseek-v3.2\n")
+                                self.print_info("已创建新的.env文件")
+                            
+                            # 验证文件是否创建成功
+                            if os.path.exists(env_file):
+                                file_size = os.path.getsize(env_file)
+                                self.print_info(f".env文件创建成功，大小: {file_size} 字节")
+                                # 读取并显示文件内容（隐藏API密钥）
+                                with open(env_file, "r", encoding="utf-8") as f:
+                                    content = f.read()
+                                # 隐藏API密钥
+                                hidden_content = content.replace(dashscope_api_key, f"{dashscope_api_key[:4]}...{dashscope_api_key[-4:]}")
+                                self.print_info(f".env文件内容:\n{hidden_content}")
+                            else:
+                                self.print_error(".env文件创建失败")
+                            
+                            self.print_success("API密钥配置成功！")
+                            # 重新加载环境变量
+                            load_dotenv()
+                            
+                            # 重新导入qwen模块，确保_CLIENT被重新初始化
+                            self.print_info("正在重新初始化API客户端...")
+                            if 'qwen' in sys.modules:
+                                del sys.modules['qwen']
+                            # 重新导入
+                            from qwen import _CLIENT, _CLIENT_PROVIDER
+                            self.print_info(f"重新初始化后，客户端状态: {_CLIENT is not None}")
+                            if _CLIENT is not None:
+                                self.print_info(f"客户端提供商: {_CLIENT_PROVIDER}")
+                            
+                            # 重新检查API密钥
+                            dashscope_api_key = os.getenv("DASHSCOPE_API_KEY")
+                            self.print_info(f"重新检查API密钥: {dashscope_api_key is not None}")
+                            if dashscope_api_key:
+                                hidden_key = f"{dashscope_api_key[:4]}...{dashscope_api_key[-4:]}"
+                                self.print_info(f"API密钥: {hidden_key}")
+                        except Exception as e:
+                            self.print_error(f"写入.env文件失败: {e}")
+                            # 尝试使用绝对路径
+                            try:
+                                import tempfile
+                                temp_env_file = os.path.join(tempfile.gettempdir(), "fastapi1w1.env")
+                                with open(temp_env_file, "w", encoding="utf-8") as f:
+                                    f.write(f"DASHSCOPE_API_KEY={dashscope_api_key}\n")
+                                self.print_info(f"已将API密钥写入临时文件: {temp_env_file}")
+                                self.print_info("请手动复制此文件到项目根目录并重命名为.env")
+                            except Exception as e2:
+                                self.print_error(f"写入临时文件也失败: {e2}")
+                    else:
+                        self.print_error("API密钥输入为空")
+                except Exception as e:
+                    self.print_error(f"读取API密钥失败: {e}")
+            
+            # 再次检查API密钥
+            dashscope_api_key = os.getenv("DASHSCOPE_API_KEY")
+            
+            # 检查qwen模块是否已经导入，如果没有，重新导入
+            if 'qwen' not in sys.modules:
+                self.print_info("重新导入qwen模块...")
+                from qwen import _CLIENT, _CLIENT_PROVIDER
+            
+            # 检查API配置
+            if _CLIENT is not None:
+                if dashscope_api_key:
+                    # 隐藏中间部分，只显示前4位和后4位
+                    hidden_key = f"{dashscope_api_key[:4]}...{dashscope_api_key[-4:]}"
+                    self.print_success(f"千问API已配置 (提供商: {_CLIENT_PROVIDER}, 密钥: {hidden_key})")
+                else:
+                    self.print_success(f"千问API已配置 (提供商: {_CLIENT_PROVIDER})")
+                api_configured = True
+            else:
+                # 如果_CLIENT仍然为None，但dashscope_api_key存在，尝试手动初始化
+                if dashscope_api_key:
+                    self.print_info("尝试手动初始化API客户端...")
+                    try:
+                        from openai import OpenAI
+                        base_url = os.getenv("DASHSCOPE_BASE_URL")
+                        if base_url:
+                            _CLIENT = OpenAI(api_key=dashscope_api_key, base_url=base_url)
+                            _CLIENT_PROVIDER = "dashscope"
+                        else:
+                            _CLIENT = OpenAI(api_key=dashscope_api_key)
+                            _CLIENT_PROVIDER = "openai"
+                        hidden_key = f"{dashscope_api_key[:4]}...{dashscope_api_key[-4:]}"
+                        self.print_success(f"千问API已配置 (提供商: {_CLIENT_PROVIDER}, 密钥: {hidden_key})")
+                        api_configured = True
+                    except Exception as e:
+                        self.print_error(f"手动初始化API客户端失败: {e}")
+                        api_configured = False
+                else:
+                    self.print_error("千问API未配置")
+                    api_configured = False
+            
+            # 检查DASHSCOPE_API_KEY是否存在（用于TTS）
+            if not dashscope_api_key:
+                self.print_error("千问TTS API未配置")
+                api_configured = False
+            else:
+                self.print_success("千问TTS API已配置")
+            
+            # 如果API未配置，显示配置指南
+            if not api_configured:
+                self.print_info("请先配置千问API密钥后再启动服务")
+                self.print_info("")
+                self.print_info("配置方法：")
+                self.print_info("  方法1: 手动配置")
+                self.print_info("    1. 复制 .env.example 为 .env")
+                self.print_info("    2. 编辑 .env 文件，填入以下配置：")
+                self.print_info("       - DASHSCOPE_API_KEY：千问API密钥")
+                self.print_info("")
+                self.print_info("  方法2: 下次启动时在控制台直接输入API密钥")
+                self.print_info("")
+                self.print_info("获取API密钥的方法：")
+                self.print_info("  千问API密钥：")
+                self.print_info("     - 访问：https://help.aliyun.com/zh/model-studio/first-api-call-to-qwen")
+                self.print_info("     - 按照指南获取API密钥")
+                self.print_info("")
+                self.print_info("注意：千问API密钥将用于对话生成和语音合成功能")
                 
                 return False
             
