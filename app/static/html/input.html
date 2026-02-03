@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>请输入文本</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+
+        .container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+        }
+
+        .input-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+            color: #555;
+        }
+
+        textarea {
+            width: 100%;
+            height: 200px;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+            resize: vertical;
+            box-sizing: border-box;
+        }
+
+        textarea:focus {
+            border-color: #4CAF50;
+            outline: none;
+        }
+
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            text-align: center;
+            font-size: 16px;
+            cursor: pointer;
+            border-radius: 4px;
+            display: block;
+            margin: 0 auto;
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            background-color: #45a049;
+        }
+
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+
+        #result {
+            margin-top: 30px;
+            padding: 20px;
+            background-color: #f9f9f9;
+            border-radius: 4px;
+            display: none;
+        }
+
+        .dialog-item {
+            margin-bottom: 15px;
+            padding: 10px;
+            border-left: 3px solid #4CAF50;
+            background-color: #fff;
+        }
+
+        .host {
+            color: #2c5aa0;
+            font-weight: bold;
+        }
+
+        .guest {
+            color: #d35400;
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>请输入文本</h1>
+
+        <div class="input-group">
+            <label for="textInput">在此输入您想要转换为播客对话的文本：</label>
+            <textarea id="textInput" placeholder="请粘贴或输入您的文本内容..."></textarea>
+        </div>
+
+        <button id="confirmBtn">生成播客对话</button>
+
+        <div id="result">
+            <h3>生成的播客对话：</h3>
+            <div id="dialogOutput"></div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('confirmBtn').addEventListener('click', function () {
+            const textInput = document.getElementById('textInput').value.trim();
+            const resultDiv = document.getElementById('result');
+            const dialogOutput = document.getElementById('dialogOutput');
+            const button = this;
+
+            if (!textInput) {
+                alert('请输入文本内容！');
+                return;
+            }
+
+            // 禁用按钮防止重复点击
+            button.disabled = true;
+            button.textContent = '生成中...';
+
+            // 清空之前的结果
+            dialogOutput.innerHTML = '';
+
+            // 模拟API调用（实际使用时需要替换为真实的千问API调用）
+            simulateQwenAPI(textInput)
+                .then(dialog => {
+                    // 显示结果区域
+                    resultDiv.style.display = 'block';
+
+                    // 渲染对话内容
+                    dialog.forEach(item => {
+                        const dialogItem = document.createElement('div');
+                        dialogItem.className = 'dialog-item';
+
+                        const roleSpan = document.createElement('span');
+                        roleSpan.className = item.role;
+                        roleSpan.textContent = item.role === 'host' ? '主持人: ' : '嘉宾: ';
+
+                        const textSpan = document.createElement('span');
+                        textSpan.textContent = item.text;
+
+                        dialogItem.appendChild(roleSpan);
+                        dialogItem.appendChild(textSpan);
+                        dialogOutput.appendChild(dialogItem);
+                    });
+                })
+                .catch(error => {
+                    alert('生成对话时出错：' + error.message);
+                })
+                .finally(() => {
+                    // 恢复按钮状态
+                    button.disabled = false;
+                    button.textContent = '生成播客对话';
+                });
+        });
+
+        // 模拟千问API调用（实际开发中需要替换为真实的API调用）
+        function simulateQwenAPI(text) {
+            return new Promise((resolve, reject) => {
+                // 模拟网络延迟
+                setTimeout(() => {
+                    try {
+                        // 这里是模拟的对话生成逻辑
+                        // 实际使用时需要调用千问API，如通义千问[12](@ref)
+                        const generatedDialog = generatePodcastDialog(text);
+                        resolve(generatedDialog);
+                    } catch (error) {
+                        reject(error);
+                    }
+                }, 2000);
+            });
+        }
+
+        // 简单的对话生成逻辑（示例）
+        function generatePodcastDialog(text) {
+            // 这里应该是调用AI模型生成对话的逻辑[12](@ref)
+            // 目前使用简单的模拟逻辑
+            const sentences = text.split(/[。！？]/).filter(s => s.trim().length > 0);
+            const dialog = [];
+
+            sentences.forEach((sentence, index) => {
+                if (sentence.trim().length > 0) {
+                    const role = index % 2 === 0 ? 'host' : 'guest';
+                    dialog.push({
+                        role: role,
+                        text: sentence.trim() + (index < sentences.length - 1 ? '。' : '')
+                    });
+                }
+            });
+
+            // 如果对话太短，添加一些引导性内容
+            if (dialog.length < 3) {
+                dialog.unshift(
+                    { role: 'host', text: '欢迎收听本期播客，今天我们来聊聊一个有趣的话题。' },
+                    { role: 'guest', text: '是的，这个话题确实很有意义，让我们深入探讨一下。' }
+                );
+            }
+
+            return dialog;
+        }
+    </script>
+</body>
+
+</html>
