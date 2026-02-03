@@ -125,43 +125,63 @@ def _get_style_prompt(style: str, participants: int) -> str:
     return base_prompt + "\n\n" + role_instruction
 
 
-def _call_qwen_api(prompt: str, system_prompt: str = None, model: str = "deepseek-v3.2", max_tokens: int = 4096) -> tuple:
+def _call_qwen_api(prompt: str, system_prompt: str = None, model: str = "qwen-plus", max_tokens: int = 4096) -> tuple:
     if _CLIENT is None:
         raise RuntimeError("Qwen/OpenAI client 未配置（请设置 OPENAI_API_KEY 或 DASHSCOPE_API_KEY）")
 
     if system_prompt is None:
         system_prompt = "你是一个擅长将文章改写为对话式播客脚本的助手。"
 
-    completion = _CLIENT.chat.completions.create(
-        model=model,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": prompt},
-        ],
-        max_tokens=max_tokens,
-        temperature=0.7,
-    )
-    
-    # 获取token使用量
-    token_usage = {
-        "prompt_tokens": getattr(completion, "usage", {}).get("prompt_tokens", 0),
-        "completion_tokens": getattr(completion, "usage", {}).get("completion_tokens", 0),
-        "total_tokens": getattr(completion, "usage", {}).get("total_tokens", 0)
-    }
-    
     try:
-        content = completion.choices[0].message.content
-        return content, token_usage
-    except Exception:
+        completion = _CLIENT.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": prompt},
+            ],
+            max_tokens=max_tokens,
+            temperature=0.7,
+        )
+        
+        # 获取token使用量
         try:
-            content = completion.choices[0].text
+            usage = getattr(completion, "usage", None)
+            if usage:
+                token_usage = {
+                    "prompt_tokens": getattr(usage, "prompt_tokens", 0),
+                    "completion_tokens": getattr(usage, "completion_tokens", 0),
+                    "total_tokens": getattr(usage, "total_tokens", 0)
+                }
+            else:
+                token_usage = {
+                    "prompt_tokens": 0,
+                    "completion_tokens": 0,
+                    "total_tokens": 0
+                }
+        except Exception:
+            token_usage = {
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "total_tokens": 0
+            }
+        
+        try:
+            content = completion.choices[0].message.content
             return content, token_usage
         except Exception:
-            content = str(completion)
-            return content, token_usage
+            try:
+                content = completion.choices[0].text
+                return content, token_usage
+            except Exception:
+                content = str(completion)
+                return content, token_usage
+    except Exception as e:
+        print(f"API调用失败: {e}")
+        print(f"使用的模型: {model}")
+        raise
 
 
-def generate_dialog_script(text: str, style: str = "casual", participants: int = 2, max_tokens: int = 4096) -> Dict[str, Any]:
+def generate_dialog_script(text: str, style: str = "casual", participants: int = 2, max_tokens: int = 4096, model: str = "deepseek-v3.2") -> Dict[str, Any]:
     system_prompt = _get_style_prompt(style, participants)
     
     user_prompt = f"""请基于以下新闻创作一个引人入胜的播客对话：
@@ -229,12 +249,13 @@ def generate_dialog_script(text: str, style: str = "casual", participants: int =
 直接返回JSON，不要其他文字。确保对话自然流畅，每个角色发言有明显个性区别。"""
 
     try:
-        resp_text, token_usage = _call_qwen_api(user_prompt, system_prompt=system_prompt, max_tokens=max_tokens)
+        resp_text, token_usage = _call_qwen_api(user_prompt, system_prompt=system_prompt, model=model, max_tokens=max_tokens)
         
         try:
             parsed = json.loads(resp_text)
             parsed.setdefault("raw", resp_text)
             parsed.setdefault("token_usage", token_usage)
+            parsed.setdefault("model", model)
             return parsed
         except Exception:
             import re
@@ -244,6 +265,7 @@ def generate_dialog_script(text: str, style: str = "casual", participants: int =
                     parsed = json.loads(json_match.group())
                     parsed.setdefault("raw", resp_text)
                     parsed.setdefault("token_usage", token_usage)
+                    parsed.setdefault("model", model)
                     return parsed
                 except Exception:
                     pass
@@ -253,27 +275,18 @@ def generate_dialog_script(text: str, style: str = "casual", participants: int =
                 "segments": [{"role": "host", "text": resp_text}],
                 "raw": resp_text,
                 "token_usage": token_usage,
+                "model": model,
                 "error": "JSON解析失败"
             }
     except Exception as e:
-        import re
-        sentences = [s.strip() for s in re.split(r'(?<=[。！？.!?])\s*', text) if s.strip()]
-        roles = []
-        for i in range(participants):
-            if i == 0:
-                roles.append({"id": f"r{i+1}", "name": "主持人", "title": "资深媒体人"})
-            else:
-                roles.append({"id": f"r{i+1}", "name": f"嘉宾{i}", "title": "城市治理专家"})
-
-        segments = []
-        for idx, s in enumerate(sentences):
-            segments.append({"role": roles[idx % participants]["id"], "text": s})
-
-        raw = "\n".join(sentences[:5])
+        # 当模型调用失败时，不再输出机械拆分的文本，而是返回明确的错误信息
+        error_msg = f"模型调用失败: {str(e)}"
         return {
-            "roles": roles,
-            "segments": segments,
-            "raw": raw,
+            "roles": [{"id": "host", "name": "系统", "title": "错误信息"}],
+            "segments": [{"role": "host", "text": "模型调用失败，请检查API配置和网络连接。"}],
+            "raw": error_msg,
             "token_usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
-            "error": str(e)
+            "error": error_msg,
+            "model": model,
+            "model_error": True
         }

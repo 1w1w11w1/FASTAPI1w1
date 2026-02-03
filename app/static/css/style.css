@@ -450,6 +450,12 @@ footer {
     border-left: 4px solid #3498db;
 }
 
+/* Token使用量警告样式 */
+.token-usage-info.warning {
+    border-left-color: #ff9800;
+    background: #fff9e6;
+}
+
 .token-usage-title {
     font-weight: bold;
     color: #2c3e50;
@@ -465,4 +471,21 @@ footer {
 .token-usage-details span {
     color: #7f8c8d;
     font-size: 0.9rem;
+}
+
+/* Token使用量警告信息样式 */
+.token-usage-warning {
+    margin-top: 0.8rem;
+    padding: 0.8rem;
+    background: #fff3cd;
+    border: 1px solid #ffeeba;
+    border-radius: 4px;
+    color: #856404;
+    font-size: 0.95rem;
+    font-weight: 500;
+}
+
+.token-usage-warning::before {
+    content: "⚠️ ";
+    margin-right: 0.5rem;
 }

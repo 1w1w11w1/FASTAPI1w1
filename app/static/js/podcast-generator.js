@@ -14,10 +14,13 @@ document.addEventListener('DOMContentLoaded', function() {
     const participants = document.getElementById('participants');
     const fileInput = document.getElementById('fileInput');
     const createPodcastBtn = document.getElementById('createPodcastBtn');
+    const modelSelect = document.getElementById('model');
+    const customModelInput = document.getElementById('customModel');
     
     let currentScript = null; // 保存当前脚本
     let currentTokenUsage = null; // 保存当前token使用量
     let currentDialog = null; // 保存当前对话
+    let currentModel = null; // 保存当前使用的模型
 
     // 实时更新字数统计
     textInput.addEventListener('input', function() {
@@ -48,6 +51,15 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
+    // 模型选择事件监听器
+    modelSelect.addEventListener('change', function() {
+        const isCustomModel = modelSelect.value === 'custom';
+        customModelInput.disabled = !isCustomModel;
+        if (!isCustomModel) {
+            customModelInput.value = '';
+        }
+    });
+
     // 生成播客对话
     generateBtn.addEventListener('click', function() {
         const content = textInput.value.trim();
@@ -68,11 +80,25 @@ document.addEventListener('DOMContentLoaded', function() {
         loadingIndicator.classList.remove('hidden');
         resultSection.classList.add('hidden');
         
+        // 获取所选模型
+        let model = modelSelect.value;
+        if (model === 'custom') {
+            const customModel = customModelInput.value.trim();
+            if (!customModel) {
+                alert('请输入自定义模型名称！');
+                return;
+            }
+            model = customModel;
+        }
+        
+        // 保存当前模型
+        currentModel = model;
+        
         // 调用后端真实接口
         fetch('/generate-script', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text: content, style: dialogStyle.value, participants: parseInt(participants.value) })
+            body: JSON.stringify({ text: content, style: dialogStyle.value, participants: parseInt(participants.value), model: model })
         })
         .then(r => r.json())
         .then(resp => {
@@ -81,6 +107,11 @@ document.addEventListener('DOMContentLoaded', function() {
             const script = resp.script;
             currentScript = script; // 保存当前脚本
             currentTokenUsage = resp.token_usage || {}; // 保存当前token使用量
+            
+            // 检查是否存在模型错误
+            const isModelError = script.model_error === true;
+            const hasTokenError = (currentTokenUsage.total_tokens || 0) === 0;
+            
             const dialog = [];
             const roleMap = {};
             if (script.roles && Array.isArray(script.roles)){
@@ -109,6 +140,11 @@ document.addEventListener('DOMContentLoaded', function() {
             displayTokenUsage(currentTokenUsage);
             loadingIndicator.classList.add('hidden');
             resultSection.classList.remove('hidden');
+            
+            // 如果是模型错误或token使用量为0，显示更明确的错误提示
+            if (isModelError || hasTokenError) {
+                alert('模型调用失败，请检查API配置和网络连接。\n\n排查思路：\n1. 检查.env文件中的API密钥是否正确\n2. 确保网络连接正常\n3. 尝试重启服务\n4. 如问题持续，请检查API提供商的服务状态');
+            }
             
             // 自动保存生成的对话
             saveGeneratedDialog(script);
@@ -283,13 +319,57 @@ document.addEventListener('DOMContentLoaded', function() {
             textDiv.className = 'dialog-text';
             textDiv.textContent = item.text;
 
+            // 添加语音播放按钮
+            const audioBtn = document.createElement('button');
+            audioBtn.className = 'audio-play-btn';
+            audioBtn.textContent = '🔊 播放语音';
+            audioBtn.onclick = function() {
+                generateAndPlaySpeech(item.text, item.role, index);
+            };
+
             dialogItem.appendChild(header);
             dialogItem.appendChild(textDiv);
+            dialogItem.appendChild(audioBtn);
             list.appendChild(dialogItem);
         });
 
         dialogOutput.appendChild(list);
         generateBtn.disabled = false;
+    }
+
+    // 生成并播放语音
+    function generateAndPlaySpeech(text, role, index) {
+        // 显示加载指示器
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        loadingIndicator.classList.remove('hidden');
+        
+        // 调用TTS API生成语音
+        fetch('/generate-speech', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: text, speaker_id: role, audio_format: 'mp3' })
+        })
+        .then(r => r.json())
+        .then(resp => {
+            if (!resp || !resp.ok) throw new Error(resp && resp.error ? resp.error : '生成语音失败');
+            
+            // 播放语音
+            const audioPath = resp.audio_path;
+            if (audioPath) {
+                const audio = new Audio(audioPath);
+                audio.play().catch(error => {
+                    console.error('播放语音失败:', error);
+                    alert('播放语音失败，请检查浏览器设置');
+                });
+            }
+        })
+        .catch(error => {
+            alert('生成语音时出错：' + error.message);
+            console.error('生成语音失败:', error);
+        })
+        .finally(() => {
+            loadingIndicator.classList.add('hidden');
+        });
     }
 
     // 显示token使用量
@@ -309,8 +389,11 @@ document.addEventListener('DOMContentLoaded', function() {
         const completionTokens = tokenUsage.completion_tokens || 0;
         const totalTokens = tokenUsage.total_tokens || (promptTokens + completionTokens);
         
+        // 检查是否为异常情况（token使用量为0）
+        const isTokenZero = totalTokens === 0;
+        
         // 更新token使用量显示
-        tokenUsageElement.innerHTML = `
+        let tokenUsageHtml = `
             <div class="token-usage-title">Token使用量：</div>
             <div class="token-usage-details">
                 <span>输入：${promptTokens}</span>
@@ -318,11 +401,33 @@ document.addEventListener('DOMContentLoaded', function() {
                 <span>总计：${totalTokens}</span>
             </div>
         `;
+        
+        // 如果token使用量为0，添加警告信息
+        if (isTokenZero) {
+            tokenUsageHtml += `
+                <div class="token-usage-warning">
+                    ⚠️ 可能产生模型调用失败，请检查API配置
+                </div>
+            `;
+            tokenUsageElement.className = 'token-usage-info warning';
+        } else {
+            tokenUsageElement.className = 'token-usage-info';
+        }
+        
+        tokenUsageElement.innerHTML = tokenUsageHtml;
     }
 
     // 获取对话文本
     function getDialogText() {
         let text = '';
+        
+        // 添加生成配置信息
+        const style = dialogStyle.value;
+        const participantsNum = participants.value;
+        text += `生成配置：\n`;
+        text += `语言风格：${style === 'casual' ? '轻松随意' : style === 'entertainment' ? '娱乐幽默' : '专业严谨'}\n`;
+        text += `参与人数：${participantsNum}\n`;
+        text += `使用模型：${currentModel || 'deepseek-v3.2'}\n\n`;
         
         // 添加token使用量信息（如果有）
         if (currentTokenUsage) {

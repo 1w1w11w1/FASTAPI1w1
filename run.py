@@ -79,7 +79,7 @@ class FastAPIManager:
                 return False
         return False
 
-    def _is_port_in_use(self, host: str = "127.0.0.1", port: int = 914) -> bool:
+    def _is_port_in_use(self, host: str = "127.0.0.1", port: int = 4190) -> bool:
         """检查本地端口是否有服务在监听（通过尝试连接）。"""
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -141,7 +141,7 @@ class FastAPIManager:
                 self.print_error(f"安装依赖时出错: {e}")
         self.print_info("依赖安装完成")
 
-    def _get_pid_by_port(self, port: int = 914):
+    def _get_pid_by_port(self, port: int = 4190):
         """在 Windows 上尝试通过 netstat 查找占用指定端口的 PID；其他平台返回 None。"""
         try:
             if platform.system() == 'Windows':
@@ -176,45 +176,65 @@ class FastAPIManager:
     def _check_api_config(self):
         """检查API配置是否有效"""
         try:
+            # 检查千问API配置（用于对话生成和TTS）
             sys.path.insert(0, str(self.app_dir))
             from qwen import _CLIENT, _CLIENT_PROVIDER
             
-            if _CLIENT is None:
-                self.print_error("API未配置")
-                self.print_info("请先配置API密钥后再启动服务")
+            # 检查环境变量中的配置
+            import os
+            from dotenv import load_dotenv
+            load_dotenv()
+            
+            # 检查千问API配置
+            api_configured = False
+            if _CLIENT is not None:
+                api_key = os.getenv("OPENAI_API_KEY") or os.getenv("DASHSCOPE_API_KEY")
+                if api_key:
+                    # 隐藏中间部分，只显示前4位和后4位
+                    hidden_key = f"{api_key[:4]}...{api_key[-4:]}"
+                    self.print_success(f"千问API已配置 (提供商: {_CLIENT_PROVIDER}, 密钥: {hidden_key})")
+                else:
+                    self.print_success(f"千问API已配置 (提供商: {_CLIENT_PROVIDER})")
+                api_configured = True
+            else:
+                self.print_error("千问API未配置")
+            
+            # 检查DASHSCOPE_API_KEY是否存在（用于TTS）
+            dashscope_api_key = os.getenv("DASHSCOPE_API_KEY")
+            if not dashscope_api_key:
+                self.print_error("千问TTS API未配置")
+                api_configured = False
+            
+            # 如果API未配置，显示配置指南
+            if not api_configured:
+                self.print_info("请先配置千问API密钥后再启动服务")
                 self.print_info("")
                 self.print_info("配置方法：")
-                self.print_info("  方法1: 运行配置向导")
-                self.print_info("    python setup_api.py")
-                self.print_info("")
-                self.print_info("  方法2: 手动配置")
+                self.print_info("  方法: 手动配置")
                 self.print_info("    1. 复制 .env.example 为 .env")
-                self.print_info("    2. 编辑 .env 文件，填入API密钥")
+                self.print_info("    2. 编辑 .env 文件，填入以下配置：")
+                self.print_info("       - DASHSCOPE_API_KEY：千问API密钥")
                 self.print_info("")
-                self.print_info("  方法3: 环境变量")
-                self.print_info("    Windows PowerShell:")
-                self.print_info('      $env:OPENAI_API_KEY="your-api-key"')
-                self.print_info("    Linux/macOS:")
-                self.print_info('      export OPENAI_API_KEY="your-api-key"')
+                self.print_info("获取API密钥的方法：")
+                self.print_info("  千问API密钥：")
+                self.print_info("     - 访问：https://help.aliyun.com/zh/model-studio/first-api-call-to-qwen")
+                self.print_info("     - 按照指南获取API密钥")
                 self.print_info("")
-                self.print_info("验证配置:")
-                self.print_info("    python check_api.py")
+                self.print_info("注意：千问API密钥将用于对话生成和语音合成功能")
                 
-                # 自动打开千问API配置指导网页
+                # 自动打开配置指导网页
                 try:
                     import webbrowser
-                    config_url = "https://help.aliyun.com/zh/model-studio/first-api-call-to-qwen"
-                    self.print_info(f"正在打开千问API配置指导网页: {config_url}")
-                    webbrowser.open(config_url)
-                    self.print_info("请按照网页指南完成API密钥的获取和配置")
+                    # 打开千问API配置指导网页
+                    qwen_url = "https://help.aliyun.com/zh/model-studio/first-api-call-to-qwen"
+                    self.print_info(f"正在打开千问API配置指导网页: {qwen_url}")
+                    webbrowser.open(qwen_url)
                 except Exception as e:
                     self.print_warning(f"无法自动打开网页: {e}")
-                    self.print_info(f"请手动访问: https://help.aliyun.com/zh/model-studio/first-api-call-to-qwen")
                 
                 return False
-            else:
-                self.print_success(f"API已配置 (提供商: {_CLIENT_PROVIDER})")
-                return True
+            
+            return True
         except Exception as e:
             self.print_error(f"检查API配置失败: {e}")
             return False
@@ -254,7 +274,7 @@ class FastAPIManager:
 
         if self._is_port_in_use():
             if force:
-                pid = self._get_pid_by_port(914)
+                pid = self._get_pid_by_port(4190)
                 if pid:
                     try:
                         if platform.system() == 'Windows':
@@ -270,7 +290,7 @@ class FastAPIManager:
                     self.print_error("无法定位占用端口的进程")
                     return False
             else:
-                self.print_error("端口 914 已被占用")
+                self.print_error("端口 4190 已被占用")
                 return False
             
         # 初始化步骤提示
@@ -319,7 +339,7 @@ class FastAPIManager:
             sys.executable, "-m", "uvicorn", 
             "main:app", 
             "--host", "0.0.0.0", 
-            "--port", "914"
+            "--port", "4190"
         ]
         
         # 根据模式选择启动方式
@@ -328,7 +348,7 @@ class FastAPIManager:
             try:
                 import uvicorn
                 self.print_info("前台模式启动 (按 Ctrl+C 停止)")
-                uvicorn.run("main:app", host="0.0.0.0", port=914)
+                uvicorn.run("main:app", host="0.0.0.0", port=4190)
                 return True
             except Exception as e:
                 self.print_error(f"启动失败: {e}")
@@ -396,7 +416,7 @@ class FastAPIManager:
         # 等待端口就绪，最多等待30秒
         max_wait = 30
         for i in range(max_wait):
-            if self._is_port_in_use("127.0.0.1", 914):
+            if self._is_port_in_use("127.0.0.1", 4190):
                 self.print_success(f"服务已就绪 ({i+1}s)")
                 break
             time.sleep(1)
@@ -406,7 +426,7 @@ class FastAPIManager:
 
         if self.is_running():
             self.print_success("应用启动成功")
-            url = "http://localhost:914"
+            url = "http://localhost:4190"
             self.print_info(f"访问地址: {url}")
             self.print_info(f"API 文档: {url}/docs")
             self.print_info(f"进程 PID: {process.pid}")

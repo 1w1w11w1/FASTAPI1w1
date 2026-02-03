@@ -1,29 +1,40 @@
 import os
 import json
+import uuid
+import httpx
 from typing import Dict, List, Optional, Tuple
 from pathlib import Path
+from dotenv import load_dotenv
 
 class TTSManager:
     def __init__(self):
+        # 加载环境变量
+        load_dotenv()
+        
+        # 千问TTS配置
+        self.dashscope_api_key = os.getenv("DASHSCOPE_API_KEY")
+        self.dashscope_tts_endpoint = "https://dashscope.aliyuncs.com/api/v1/tts/text2speech"
+        
+        # 说话人配置（使用千问TTS支持的音色）
         self.speakers = {
             "host": {
                 "name": "主持人",
-                "voice_id": "zh-CN-YunxiNeural",  # 微软Azure语音
+                "voice_id": "zh_female_qingxin",  # 千问语音合成模型
                 "style": "default"
             },
             "guest": {
                 "name": "嘉宾",
-                "voice_id": "zh-CN-YunjianNeural",  # 微软Azure语音
+                "voice_id": "zh_male_zhichang",  # 千问语音合成模型
                 "style": "default"
             },
             "guestA": {
                 "name": "嘉宾A",
-                "voice_id": "zh-CN-YunjianNeural",  # 微软Azure语音
+                "voice_id": "zh_male_zhichang",  # 千问语音合成模型
                 "style": "default"
             },
             "guestB": {
                 "name": "嘉宾B",
-                "voice_id": "zh-CN-YunxiaNeural",  # 微软Azure语音
+                "voice_id": "zh_female_youth",  # 千问语音合成模型
                 "style": "default"
             }
         }
@@ -41,6 +52,11 @@ class TTSManager:
         :return: 生成的音频文件路径
         """
         try:
+            # 检查配置是否齐全
+            if not self.dashscope_api_key:
+                print("千问TTS配置不完整，请在.env文件中设置DASHSCOPE_API_KEY")
+                return None
+            
             # 获取说话人配置
             speaker = self.speakers.get(speaker_id, self.speakers["host"])
             
@@ -52,17 +68,72 @@ class TTSManager:
             filename = f"{speaker_id}_{text_hash}_{timestamp}.{audio_format}"
             output_path = self.audio_output_dir / filename
             
-            # 这里是预留的API调用接口
-            # 实际使用时，需要替换为真实的TTS API调用
-            # 例如微软Azure TTS、百度语音、科大讯飞等
+            # 构建请求参数
+            request_data = {
+                "model": "sambert-zh-general-v2",  # 千问语音合成模型
+                "input": {
+                    "text": text
+                },
+                "parameters": {
+                    "voice": speaker["voice_id"],
+                    "format": audio_format,
+                    "sample_rate": 24000,
+                    "speed": 1.0,
+                    "pitch": 1.0,
+                    "volume": 1.0
+                }
+            }
             
-            # 模拟生成音频文件（实际实现时需要替换）
-            with open(output_path, 'w') as f:
-                f.write(f"{speaker['name']}: {text}")
+            # 构建请求头
+            headers = {
+                "Authorization": f"Bearer {self.dashscope_api_key}",
+                "Content-Type": "application/json"
+            }
             
-            return str(output_path)
+            # 调用千问TTS API
+            print(f"调用千问TTS API生成语音...")
+            print(f"文本: {text[:50]}...")
+            print(f"说话人: {speaker['name']} ({speaker['voice_id']})")
+            
+            with httpx.Client() as client:
+                response = client.post(
+                    self.dashscope_tts_endpoint,
+                    json=request_data,
+                    headers=headers,
+                    timeout=30.0
+                )
+                
+                # 检查响应状态
+                if response.status_code == 200:
+                    # 解析响应
+                    response_data = response.json()
+                    if response_data.get("status_code") == 200:
+                        # 获取音频数据
+                        audio_data = response_data.get("audio_data")
+                        if audio_data:
+                            # 解码base64音频数据
+                            import base64
+                            audio_bytes = base64.b64decode(audio_data)
+                            # 保存音频数据
+                            with open(output_path, 'wb') as f:
+                                f.write(audio_bytes)
+                            print(f"语音生成成功: {output_path}")
+                            return str(output_path)
+                        else:
+                            print("语音生成失败: 未返回音频数据")
+                            return None
+                    else:
+                        print(f"语音生成失败: {response_data.get('status_message', '未知错误')}")
+                        return None
+                else:
+                    print(f"语音生成失败，状态码: {response.status_code}")
+                    print(f"错误信息: {response.text}")
+                    return None
+                    
         except Exception as e:
             print(f"语音生成失败: {e}")
+            import traceback
+            traceback.print_exc()
             return None
     
     def process_dialog(self, dialog: List[Dict]) -> List[Dict]:

@@ -39,6 +39,7 @@ class GenerateRequest(BaseModel):
     text: str
     style: Optional[str] = "casual"
     participants: Optional[int] = 2
+    model: Optional[str] = "deepseek-v3.2"
 
 
 @app.post("/generate-script")
@@ -47,7 +48,7 @@ async def generate_script(req: GenerateRequest):
         raise HTTPException(status_code=400, detail="text 为空")
 
     try:
-        result = generate_dialog_script(req.text, style=req.style or "casual", participants=req.participants or 2)
+        result = generate_dialog_script(req.text, style=req.style or "casual", participants=req.participants or 2, model=req.model or "deepseek-v3.2")
         return {"ok": True, "script": result, "token_usage": result.get("token_usage", {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0})}
     except Exception as e:
         return {"ok": False, "error": str(e), "token_usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}}

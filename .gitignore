@@ -49,3 +49,7 @@ Thumbs.db
 tests/results/
 tests/*.json
 tests/*.txt
+
+# 本地结果文件
+results/
+
